@@ -18,7 +18,6 @@ const repo = join(wb, "..");
 const banner = "// 自动生成，勿手改：node scripts/gen-index.mjs\n";
 const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-// —— 仓库级链接（相对符号链接，幂等）——
 const ensureLink = (linkPath, target) => {
   const abs = join(dirname(linkPath), target);
   if (!existsSync(abs)) return false;
@@ -28,7 +27,19 @@ const ensureLink = (linkPath, target) => {
     else return true; // 真实文件/目录（成片工程链接进来的）：不动
   } catch { /* 不存在 */ }
   mkdirSync(dirname(linkPath), { recursive: true });
-  symlinkSync(target, linkPath);
+  try {
+    symlinkSync(target, linkPath);
+  } catch (err) {
+    if (process.platform === "win32") {
+      try {
+        symlinkSync(abs, linkPath, "junction");
+      } catch (jErr) {
+        console.warn(`[gen-index] Could not link ${linkPath} -> ${target}:`, jErr.message);
+      }
+    } else {
+      throw err;
+    }
+  }
   return true;
 };
 const publicDir = join(wb, "public");
@@ -71,7 +82,7 @@ const walkDemos = (dir) => {
     if (MATERIAL_REQUIRED.has(stem)) continue;
     const src = readFileSync(p, "utf8");
     if (!new RegExp(`export const ${stem}\\s*:\\s*React\\.FC\\s*=`).test(src)) continue;
-    const rel = relative(demosDir, p).replace(/\.tsx$/, "");
+    const rel = relative(demosDir, p).replace(/\.tsx$/, "").replace(/\\/g, "/");
     const [category, slug] = rel.split("/");
     const m = DUR_PAT.exec(src);
     let durExport = m?.[1];

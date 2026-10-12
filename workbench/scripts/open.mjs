@@ -28,6 +28,20 @@ const positional = args.filter((a, i) => !a.startsWith("--") && !(i > 0 && args[
 
 const isLink = (p) => { try { return lstatSync(p).isSymbolicLink(); } catch { return false; } };
 const rmLink = (p) => { if (isLink(p)) unlinkSync(p); };
+const safeLink = (target, linkPath) => {
+  try {
+    symlinkSync(target, linkPath);
+  } catch (err) {
+    if (process.platform === "win32") {
+      const isDir = existsSync(target) && statSync(target).isDirectory();
+      if (isDir) {
+        symlinkSync(target, linkPath, "junction");
+        return;
+      }
+    }
+    throw err;
+  }
+};
 const log = (s) => console.log(`[workbench] ${s}`);
 const die = (s, code = 1) => { console.error(`[workbench] ${s}`); process.exit(code); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -51,7 +65,7 @@ if (!relink) {
 
   // —— 2. 链接 src → proj，public/* → public/* ——
   rmLink(projLink);
-  symlinkSync(srcDir, projLink);
+  safeLink(srcDir, projLink);
   const pub = join(wb, "public");
   mkdirSync(pub, { recursive: true });
   // 清掉上一部片留下的链接（只删符号链接和我们建的 textures/ 兜底目录，不碰真实文件）
@@ -67,7 +81,7 @@ if (!relink) {
   if (existsSync(publicSrc)) {
     for (const e of readdirSync(publicSrc)) {
       if (e.startsWith(".")) continue;
-      symlinkSync(join(publicSrc, e), join(pub, e));
+      safeLink(join(publicSrc, e), join(pub, e));
       n++;
     }
   }
